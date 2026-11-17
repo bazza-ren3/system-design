@@ -1,0 +1,676 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SaaS Platform — System Design</title>
+<style>
+  :root{
+    --bg:#0a0e1a;
+    --surface:#11172a;
+    --surface-2:#161d36;
+    --surface-3:#1b2444;
+    --ink:#e8ecf7;
+    --muted:#8b96b8;
+    --faint:#5b6689;
+    --line:#2a3560;
+    --line-strong:#3a4778;
+    --accent:#45d4c0;
+    --accent-ink:#042b26;
+    --tenant:#8891ff;
+    --tenant-ink:#11123a;
+    --shared:#45d4c0;
+    --infra:#e3a53f;
+    --infra-ink:#2c1f06;
+    --good:#4fd07a;
+    --unverified:#5b6689;
+    --font-head: -apple-system, "Segoe UI Semibold", "Segoe UI", system-ui, sans-serif;
+    --font-body: -apple-system, "Segoe UI", system-ui, sans-serif;
+    --font-mono: ui-monospace, "Cascadia Mono", "Segoe UI Mono", Consolas, "Roboto Mono", monospace;
+  }
+  :root[data-theme="light"]{
+    --bg:#f3f5fb; --surface:#ffffff; --surface-2:#eef1f9; --surface-3:#e5e9f5;
+    --ink:#141a2c; --muted:#5c6a8c; --faint:#8590ac;
+    --line:#d7deef; --line-strong:#b9c4e0;
+    --accent:#0f9c8a; --accent-ink:#e3faf5;
+    --tenant:#5457d1; --tenant-ink:#eceeff;
+    --shared:#0f9c8a; --infra:#b6791f; --infra-ink:#faf1e2;
+    --good:#1f9d52; --unverified:#8590ac;
+  }
+  @media (prefers-color-scheme: light){
+    :root:not([data-theme="dark"]){
+      --bg:#f3f5fb; --surface:#ffffff; --surface-2:#eef1f9; --surface-3:#e5e9f5;
+      --ink:#141a2c; --muted:#5c6a8c; --faint:#8590ac;
+      --line:#d7deef; --line-strong:#b9c4e0;
+      --accent:#0f9c8a; --accent-ink:#e3faf5;
+      --tenant:#5457d1; --tenant-ink:#eceeff;
+      --shared:#0f9c8a; --infra:#b6791f; --infra-ink:#faf1e2;
+      --good:#1f9d52; --unverified:#8590ac;
+    }
+  }
+
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{
+    background:var(--bg); color:var(--ink);
+    font-family:var(--font-body); line-height:1.45;
+    padding:0 0 6rem; font-size:15px;
+    margin:0;
+  }
+  a{color:inherit;}
+  .mono{font-family:var(--font-mono);font-variant-numeric:tabular-nums;}
+
+  /* ---------- Deck shell ---------- */
+  .deck{max-width:1320px;margin:0 auto;padding:0 1.25rem;display:flex;gap:2.5rem;align-items:flex-start;}
+  .rail{
+    position:sticky; top:2rem; width:172px; flex:0 0 172px;
+    display:flex; flex-direction:column; gap:.35rem;
+    padding-top:2.4rem;
+  }
+  .rail a{
+    display:flex; gap:.55rem; align-items:baseline;
+    font-family:var(--font-mono); font-size:.72rem; letter-spacing:.02em;
+    color:var(--faint); text-decoration:none; padding:.25rem 0;
+    border-left:2px solid transparent;
+  }
+  .rail a:hover{color:var(--ink);border-left-color:var(--accent);padding-left:.5rem;}
+  .rail a .n{color:var(--line-strong);}
+  @media (max-width:900px){ .rail{display:none;} }
+
+  .slides{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;}
+
+  /* ---------- Cover ---------- */
+  .cover{padding:4.5rem 0 4rem;}
+  .cover .kicker{
+    font-family:var(--font-mono);text-transform:uppercase;letter-spacing:.16em;
+    font-size:.74rem;color:var(--accent);margin-bottom:1rem;
+  }
+  .cover h1{
+    font-family:var(--font-head);font-weight:700;letter-spacing:-.015em;
+    font-size:clamp(2.2rem,5vw,3.4rem);margin:0 0 .6rem;text-wrap:balance;
+  }
+  .cover .dek{color:var(--muted);font-size:1.05rem;max-width:56ch;margin-bottom:2.2rem;}
+  .cover .metarow{
+    display:flex;flex-wrap:wrap;gap:1.6rem;font-family:var(--font-mono);
+    font-size:.78rem;color:var(--faint);margin-bottom:2.8rem;
+    padding-bottom:2rem;border-bottom:1px solid var(--line);
+  }
+  .cover .metarow b{color:var(--ink);font-weight:600;}
+  .agenda{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:.4rem;}
+  .agenda a{
+    display:flex;align-items:baseline;gap:.7rem;padding:.6rem .7rem;
+    border:1px solid var(--line);border-radius:3px;text-decoration:none;
+    font-size:.85rem;color:var(--muted);
+  }
+  .agenda a:hover{border-color:var(--line-strong);color:var(--ink);}
+  .agenda a .n{font-family:var(--font-mono);color:var(--accent);font-weight:700;}
+
+  /* ---------- Slide shell ---------- */
+  .slide{padding:3.2rem 0;border-top:1px solid var(--line);scroll-margin-top:1.5rem;}
+  .slide-head{display:flex;gap:1.3rem;align-items:flex-start;margin-bottom:1.8rem;}
+  .slide-head .num{
+    font-family:var(--font-mono);font-size:2.6rem;font-weight:700;
+    color:var(--line-strong);line-height:1;flex:0 0 auto;
+  }
+  .slide-head .htext .kicker{
+    font-family:var(--font-mono);text-transform:uppercase;letter-spacing:.14em;
+    font-size:.68rem;color:var(--faint);margin-bottom:.35rem;
+  }
+  .slide-head h2{
+    font-family:var(--font-head);font-size:1.5rem;font-weight:700;
+    letter-spacing:-.01em;margin:0;text-wrap:balance;
+  }
+  .slide-head .dek{color:var(--muted);font-size:.88rem;margin-top:.3rem;max-width:62ch;}
+
+  /* ---------- Flow / diagram primitives ---------- */
+  .flow-strip{display:flex;align-items:stretch;flex-wrap:wrap;gap:.5rem;overflow-x:auto;padding-bottom:.3rem;}
+  .flow-node{
+    background:var(--surface-2);border:1px solid var(--line);border-radius:2px;
+    padding:.65rem .95rem;font-size:.82rem;min-width:118px;text-align:center;flex:1 1 118px;
+  }
+  .flow-node small{display:block;color:var(--muted);font-size:.72rem;margin-top:.15rem;}
+  .flow-node.accent{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent);}
+  .flow-arrow{display:flex;align-items:center;justify-content:center;color:var(--faint);font-size:1rem;flex:0 0 auto;padding:0 .1rem;}
+
+  .dg{display:flex;flex-direction:column;gap:0;}
+  .dg-cols{display:grid;grid-template-columns:repeat(2,1fr);gap:1rem;}
+  .dg-connectors{display:grid;grid-template-columns:repeat(2,1fr);gap:1rem;margin:.3rem 0;}
+  .dg-connectors .c{display:flex;flex-direction:column;align-items:center;color:var(--line-strong);}
+  .dg-connectors .c .line{width:0;height:16px;border-left:1.5px dashed var(--line-strong);}
+  .dg-connectors .c .arrow{font-size:.85rem;color:var(--faint);line-height:1;}
+
+  .dg-box{
+    border:1px solid var(--line);border-left:3px solid var(--line-strong);
+    border-radius:3px;background:var(--surface);padding:.85rem 1rem;font-size:.8rem;
+  }
+  .dg-box.tenant{border-left-color:var(--tenant);}
+  .dg-box.infra{border-left-color:var(--infra);}
+  .dg-box.shared{border-left-color:var(--shared);}
+  .dg-box h4{margin:0 0 .3rem;font-family:var(--font-head);font-size:.86rem;}
+  .dg-box .stack{color:var(--muted);font-size:.75rem;line-height:1.6;}
+  .dg-box .stack .mono{color:var(--faint);}
+
+  .dg-bracket{
+    display:flex;align-items:center;gap:.8rem;margin:1.5rem 0 .9rem;
+    font-family:var(--font-mono);text-transform:uppercase;letter-spacing:.07em;
+    font-size:.68rem;color:var(--faint);
+  }
+  .dg-bracket::before,.dg-bracket::after{content:"";flex:1 1 auto;height:1px;background:var(--line);}
+
+  /* ---------- Cards & grids (reused across slides) ---------- */
+  .grid{display:grid;gap:.9rem;}
+  .grid.tenant{grid-template-columns:repeat(auto-fit,minmax(260px,1fr));}
+  .grid.shared{grid-template-columns:repeat(auto-fit,minmax(220px,1fr));}
+  .grid.three{grid-template-columns:repeat(3,1fr);}
+  @media (max-width:760px){ .grid.three{grid-template-columns:1fr;} .dg-cols,.dg-connectors{grid-template-columns:1fr;} .dg-connectors{display:none;} }
+
+  .card{background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--line-strong);border-radius:3px;padding:.95rem 1.05rem 1.05rem;}
+  .card.tenant{border-left-color:var(--tenant);}
+  .card.shared{border-left-color:var(--shared);}
+  .card h3{font-family:var(--font-head);font-size:.98rem;font-weight:700;margin:0 0 .1rem;}
+  .card .tag{
+    display:inline-block;font-family:var(--font-mono);font-size:.64rem;letter-spacing:.05em;
+    text-transform:uppercase;padding:.1rem .4rem;border-radius:2px;margin-left:.4rem;
+    vertical-align:middle;position:relative;top:-1px;
+  }
+  .card.tenant .tag{background:var(--tenant-ink);color:var(--tenant);}
+  .card.shared .tag{background:var(--accent-ink);color:var(--shared);}
+  .card .meta-line{color:var(--muted);font-size:.78rem;margin:.35rem 0 .7rem;}
+  .card .meta-line .mono{color:var(--faint);}
+  .card.shared p{margin:.3rem 0 0;font-size:.79rem;color:var(--muted);}
+  .card.shared p .mono{color:var(--ink);}
+  .card .foot{margin-top:.7rem;padding-top:.6rem;border-top:1px solid var(--line);font-size:.74rem;color:var(--muted);}
+  .card .foot .mono{color:var(--faint);}
+
+  .wtable{width:100%;border-collapse:collapse;font-size:.78rem;}
+  .wtable td{padding:.28rem 0;border-top:1px solid var(--line);vertical-align:top;}
+  .wtable tr:first-child td{border-top:none;}
+  .wtable td.name{font-family:var(--font-mono);color:var(--ink);white-space:nowrap;padding-right:.6rem;}
+  .wtable td.tag{font-family:var(--font-mono);color:var(--muted);white-space:nowrap;padding-right:.6rem;}
+  .wtable td.note{color:var(--faint);font-size:.73rem;}
+
+  .pill{display:inline-block;width:.5rem;height:.5rem;border-radius:50%;margin-right:.4rem;position:relative;top:-1px;}
+  .pill.good{background:var(--good);box-shadow:0 0 0 2px color-mix(in srgb, var(--good) 25%, transparent);}
+  .pill.unverified{background:var(--unverified);}
+
+  /* ---------- Node/resource matrix ---------- */
+  .matrix-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:3px;background:var(--surface);}
+  table.matrix{width:100%;border-collapse:collapse;font-size:.78rem;min-width:760px;}
+  table.matrix th{
+    text-align:left;font-family:var(--font-mono);text-transform:uppercase;letter-spacing:.05em;
+    font-size:.66rem;color:var(--faint);background:var(--surface-2);padding:.55rem .8rem;
+    border-bottom:1px solid var(--line-strong);white-space:nowrap;
+  }
+  table.matrix td{padding:.55rem .8rem;border-bottom:1px solid var(--line);vertical-align:top;color:var(--muted);white-space:nowrap;}
+  table.matrix tr:last-child td{border-bottom:none;}
+  table.matrix td.grp{font-family:var(--font-mono);font-weight:600;color:var(--ink);}
+  table.matrix td.grp .dot{display:inline-block;width:.5rem;height:.5rem;border-radius:50%;margin-right:.5rem;position:relative;top:-1px;background:var(--line-strong);}
+  table.matrix tr.tenant-row td.grp .dot{background:var(--tenant);}
+  table.matrix td.dash{color:var(--faint);}
+  table.matrix td .mono{color:var(--ink);}
+  .matrix-caption{font-size:.74rem;color:var(--faint);margin-top:.6rem;line-height:1.5;}
+
+  /* ---------- CI/CD lanes ---------- */
+  .cicd{display:flex;flex-direction:column;gap:.9rem;}
+  .cicd-lane{
+    border:1px solid var(--line);border-left:3px solid var(--line-strong);border-radius:3px;
+    background:var(--surface);padding:.9rem 1.1rem;display:flex;flex-wrap:wrap;align-items:center;gap:.7rem;font-size:.8rem;
+  }
+  .cicd-lane.app{border-left-color:var(--accent);}
+  .cicd-lane.infra{border-left-color:var(--infra);align-items:flex-start;}
+  .cicd-lane.infra .lane-tag{padding-top:.15rem;}
+  .cicd-lane.infra .lane-badge{align-self:flex-start;}
+  .lane-tag{font-family:var(--font-mono);text-transform:uppercase;letter-spacing:.07em;font-size:.68rem;flex:0 0 auto;min-width:112px;color:var(--muted);}
+  .cicd-lane.app .lane-tag{color:var(--accent);}
+  .cicd-lane.infra .lane-tag{color:var(--infra);}
+  .cicd-steps{display:flex;align-items:center;flex-wrap:wrap;gap:.5rem;flex:1 1 auto;}
+  .cicd-substeps{display:flex;flex-direction:column;gap:.55rem;flex:1 1 auto;min-width:0;}
+  .subrow{display:flex;align-items:center;gap:.7rem;flex-wrap:wrap;}
+  .sublabel{
+    font-family:var(--font-mono);text-transform:uppercase;letter-spacing:.06em;
+    font-size:.64rem;color:var(--faint);flex:0 0 auto;min-width:38px;
+  }
+  .step{display:flex;align-items:center;gap:.5rem;color:var(--muted);}
+  .step b{color:var(--ink);font-family:var(--font-mono);font-weight:600;}
+  .gatepill{font-family:var(--font-mono);font-size:.68rem;padding:.1rem .45rem;border-radius:2px;border:1px solid var(--line-strong);color:var(--muted);}
+  .gatepill.gated{border-color:var(--infra);color:var(--infra);}
+  .lane-badge{font-family:var(--font-mono);font-size:.66rem;padding:.15rem .55rem;border-radius:2px;flex:0 0 auto;white-space:nowrap;margin-left:auto;}
+  .lane-badge.verified{border:1px solid var(--accent);color:var(--accent);}
+
+  /* ---------- Legend & footer ---------- */
+  .legend{display:flex;flex-wrap:wrap;gap:1.4rem;font-size:.76rem;color:var(--muted);margin-top:1.6rem;}
+  .legend .item{display:flex;align-items:center;gap:.45rem;}
+  .legend .swatch{width:.65rem;height:.65rem;border-radius:2px;flex:0 0 auto;}
+  .footer-meta{margin-top:2.4rem;padding-top:1.4rem;border-top:1px solid var(--line);font-size:.72rem;color:var(--faint);font-family:var(--font-mono);}
+  .deck-footer{padding:2.4rem 0 0;}
+
+  .row-label{font-family:var(--font-mono);text-transform:uppercase;letter-spacing:.08em;font-size:.7rem;color:var(--faint);margin:1.6rem 0 .6rem;}
+  .row-label:first-child{margin-top:0;}
+</style>
+</head>
+<body>
+
+<div class="deck">
+
+  <nav class="rail">
+    <a href="#cover"><span class="n">00</span>Cover</a>
+    <a href="#context"><span class="n">01</span>Context &amp; Goals</a>
+    <a href="#architecture"><span class="n">02</span>Architecture</a>
+    <a href="#compute"><span class="n">03</span>Compute &amp; Tenancy</a>
+    <a href="#tenants"><span class="n">04</span>Tenant Stack</a>
+    <a href="#data"><span class="n">05</span>Data &amp; Storage</a>
+    <a href="#secrets"><span class="n">06</span>Secrets &amp; Identity</a>
+    <a href="#llm"><span class="n">07</span>LLM Gateway</a>
+    <a href="#observability"><span class="n">08</span>Observability</a>
+    <a href="#cicd"><span class="n">09</span>CI/CD</a>
+  </nav>
+
+  <div class="slides">
+
+    <section class="cover" id="cover">
+      <div class="kicker">System Design Review</div>
+      <h1>Multi-tenant SaaS on EKS</h1>
+      <div class="dek">Multi-tenant EKS deployment of a document-intelligence application — one shared cluster, per-tenant compute/storage isolation, shipped via Helmfile + Terraform.</div>
+      <div class="metarow">
+        <div>cluster <b>saas-platform</b></div>
+        <div>region <b>ap-southeast-1</b></div>
+        <div>k8s <b>v1.35.0-eks-efcacff</b></div>
+        <div>snapshot <b>2026-07-07</b>, live via kubectl</div>
+      </div>
+      <div class="agenda">
+        <a href="#context"><span class="n">01</span>Context &amp; Goals</a>
+        <a href="#architecture"><span class="n">02</span>Architecture</a>
+        <a href="#compute"><span class="n">03</span>Compute &amp; Tenancy</a>
+        <a href="#tenants"><span class="n">04</span>Tenant Stack</a>
+        <a href="#data"><span class="n">05</span>Data &amp; Storage</a>
+        <a href="#secrets"><span class="n">06</span>Secrets &amp; Identity</a>
+        <a href="#llm"><span class="n">07</span>LLM Gateway</a>
+        <a href="#observability"><span class="n">08</span>Observability</a>
+        <a href="#cicd"><span class="n">09</span>CI/CD Deploy Paths</a>
+      </div>
+    </section>
+
+    <!-- 01 CONTEXT -->
+    <section class="slide" id="context">
+      <div class="slide-head">
+        <div class="num">01</div>
+        <div class="htext">
+          <div class="kicker">Context &amp; Design Goals</div>
+          <h2>One cluster, many customers</h2>
+          <div class="dek">This platform runs a document-intelligence app — document ingestion, RAG search, and LLM-driven workflows — for several customers on shared EKS infrastructure, isolated per tenant rather than per cluster.</div>
+        </div>
+      </div>
+      <div class="grid three">
+        <div class="dg-box">
+          <h4>Tenant isolation</h4>
+          <div class="stack">Each customer gets its own namespace, tainted node pool, RDS cluster, EFS filesystem and S3 bucket — compute and data never cross tenant lines.</div>
+        </div>
+        <div class="dg-box">
+          <h4>No static credentials</h4>
+          <div class="stack">GitHub deploys assume AWS roles via OIDC. In-cluster secrets come from HashiCorp Vault, not baked into images or values files.</div>
+        </div>
+        <div class="dg-box">
+          <h4>Elastic, spot-first compute</h4>
+          <div class="stack">Every node group runs on SPOT capacity behind the cluster-autoscaler, scaling 1→6 nodes per tenant on demand.</div>
+        </div>
+        <div class="dg-box">
+          <h4>Mesh-managed ingress</h4>
+          <div class="stack">Istio terminates HTTP behind an NLB that does the actual TLS work (ACM), with one Gateway + VirtualService per tenant for path-based routing.</div>
+        </div>
+        <div class="dg-box">
+          <h4>Centralized model access</h4>
+          <div class="stack">LLM calls go through a shared litellm gateway backed by Bedrock, rather than every tenant service holding its own model credentials.</div>
+        </div>
+        <div class="dg-box">
+          <h4>Gated production changes</h4>
+          <div class="stack">UAT deploys auto-apply; production deploys require reviewer approval via GitHub Environments before <span class="mono">helmfile sync</span> runs.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 02 ARCHITECTURE -->
+    <section class="slide" id="architecture">
+      <div class="slide-head">
+        <div class="num">02</div>
+        <div class="htext">
+          <div class="kicker">High-Level Architecture</div>
+          <h2>Edge → tenant stack → managed data</h2>
+          <div class="dek">Every request takes the same path in; every tenant gets the same shape of stack; shared platform services sit beside both, not inside either one.</div>
+        </div>
+      </div>
+
+      <div class="dg">
+        <div class="flow-strip">
+          <div class="flow-node">Client</div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-node">Cloudflare<small>DNS · CDN</small></div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-node">AWS NLB<small>TLS via ACM</small></div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-node accent" style="flex:2 1 220px;">Istio ingress gateway<small>istio-system · routes every tenant + shared host</small></div>
+        </div>
+
+        <div class="dg-connectors">
+          <div class="c"><div class="line"></div><div class="arrow">▾</div></div>
+          <div class="c"><div class="line"></div><div class="arrow">▾</div></div>
+        </div>
+
+        <div class="dg-cols">
+          <div class="dg-box tenant">
+            <h4>tenant-prod</h4>
+            <div class="stack">server · ingestor (+cron) · web · workflow<br><span class="mono">mongodb · qdrant</span></div>
+          </div>
+          <div class="dg-box tenant">
+            <h4>tenant-uat</h4>
+            <div class="stack">server · ingestor (+cron) · web · workflow<br><span class="mono">mongodb · qdrant</span></div>
+          </div>
+        </div>
+
+        <div class="dg-connectors">
+          <div class="c"><div class="line"></div><div class="arrow">▾</div></div>
+          <div class="c"><div class="line"></div><div class="arrow">▾</div></div>
+        </div>
+
+        <div class="dg-cols">
+          <div class="dg-box infra"><h4>AWS · tenant-prod</h4><div class="stack">Aurora MySQL · EFS · S3</div></div>
+          <div class="dg-box infra"><h4>AWS · tenant-uat</h4><div class="stack">Aurora MySQL · EFS · S3</div></div>
+        </div>
+
+        <div class="dg-bracket">shared across every tenant stack above</div>
+
+        <div class="grid three">
+          <div class="dg-box shared"><h4>Vault</h4><div class="stack">Secrets — HA raft + sidecar injection</div></div>
+          <div class="dg-box shared"><h4>litellm → Bedrock</h4><div class="stack">LLM gateway, shared model access</div></div>
+          <div class="dg-box shared"><h4>Prometheus · ELK</h4><div class="stack">Metrics, logs, dashboards</div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 03 COMPUTE & TENANCY -->
+    <section class="slide" id="compute">
+      <div class="slide-head">
+        <div class="num">03</div>
+        <div class="htext">
+          <div class="kicker">Compute &amp; Tenancy</div>
+          <h2>One managed node group per tenant</h2>
+          <div class="dek">A shared <span class="mono">default</span> pool runs cluster-wide system/shared components; each tenant gets its own tainted, autoscaled node group so noisy neighbors can't compete for CPU.</div>
+        </div>
+      </div>
+
+      <div class="matrix-wrap">
+        <table class="matrix">
+          <tr><th>Node group</th><th>Capacity</th><th>Live nodes</th><th>Taint</th><th>Typically runs</th></tr>
+          <tr>
+            <td class="grp"><span class="dot"></span>default</td>
+            <td>SPOT · 3–6, desired 3</td>
+            <td>5 · oldest 63d</td>
+            <td class="dash">none</td>
+            <td>istio, vault, monitoring, litellm — plus anything with no nodeSelector</td>
+          </tr>
+          <tr class="tenant-row">
+            <td class="grp"><span class="dot"></span>tenant-prod</td>
+            <td>SPOT · 1–6, desired 1</td>
+            <td>2 · 46d / 32m</td>
+            <td><span class="mono">tenant-prod:NoSchedule</span></td>
+            <td>app-server / ingestor / workflow / web, watcher</td>
+          </tr>
+          <tr class="tenant-row">
+            <td class="grp"><span class="dot"></span>tenant-uat</td>
+            <td>SPOT · 1–6, desired 1</td>
+            <td>2 · 40d / 27h</td>
+            <td><span class="mono">tenant-uat:NoSchedule</span></td>
+            <td>app-server / ingestor / workflow / web, watcher</td>
+          </tr>
+        </table>
+      </div>
+      <div class="matrix-caption">Scaled independently by cluster-autoscaler. app-web, mongodb, and qdrant are now pinned to their own tenant's node pool via nodeSelector + toleration — see Data &amp; Storage.</div>
+    </section>
+
+    <!-- 04 TENANT STACK -->
+    <section class="slide" id="tenants">
+      <div class="slide-head">
+        <div class="num">04</div>
+        <div class="htext">
+          <div class="kicker">Tenant Application Stack</div>
+          <h2>Same chart, same footprint</h2>
+          <div class="dek">Both tenants run the same <span class="mono">app</span> Helm chart with an identical component footprint, deployed through Helmfile.</div>
+        </div>
+      </div>
+
+      <div class="grid tenant">
+        <div class="card tenant">
+          <h3>tenant-prod<span class="tag">tenant</span></h3>
+          <div class="meta-line">tenant.example.com · node pool <span class="mono">tenant-prod</span></div>
+          <table class="wtable">
+            <tr><td class="name"><span class="pill good"></span>app-web</td><td class="tag">v1.9.65</td><td class="note">1/1</td></tr>
+            <tr><td class="name"><span class="pill good"></span>app-server</td><td class="tag">v1.9.69</td><td class="note">2/2 +vault-agent</td></tr>
+            <tr><td class="name"><span class="pill good"></span>app-ingestor</td><td class="tag">v1.9.59</td><td class="note">2/2 +vault-agent</td></tr>
+            <tr><td class="name">↳ cronjob</td><td class="tag">*/3 min</td><td class="note">POST /processDocsCycle</td></tr>
+            <tr><td class="name"><span class="pill good"></span>app-workflow</td><td class="tag">v0.0.35</td><td class="note">2/2 +vault-agent</td></tr>
+            <tr><td class="name"><span class="pill good"></span>watcher</td><td class="tag">latest</td><td class="note">1/1</td></tr>
+            <tr><td class="name"><span class="pill good"></span>mongodb</td><td class="tag">8.2.5</td><td class="note">1/1 · pinned to tenant-prod pool</td></tr>
+            <tr><td class="name"><span class="pill good"></span>qdrant-0</td><td class="tag">v1.16.0</td><td class="note">1/1 · pinned to tenant-prod pool</td></tr>
+          </table>
+          <div class="foot">EFS <span class="mono">efs-sc-tenant-prod</span></div>
+        </div>
+
+        <div class="card tenant">
+          <h3>tenant-uat<span class="tag">tenant</span></h3>
+          <div class="meta-line">tenant-uat.example.com · node pool <span class="mono">tenant-uat</span></div>
+          <table class="wtable">
+            <tr><td class="name"><span class="pill good"></span>app-web</td><td class="tag">v1.12.15</td><td class="note">1/1</td></tr>
+            <tr><td class="name"><span class="pill good"></span>app-server</td><td class="tag">v1.12.25</td><td class="note">2/2 +vault-agent</td></tr>
+            <tr><td class="name"><span class="pill good"></span>app-ingestor</td><td class="tag">v1.12.18</td><td class="note">2/2 +vault-agent</td></tr>
+            <tr><td class="name">↳ cronjob</td><td class="tag">*/3 min</td><td class="note">POST /processDocsCycle</td></tr>
+            <tr><td class="name"><span class="pill good"></span>app-workflow</td><td class="tag">v0.0.35</td><td class="note">2/2 +vault-agent</td></tr>
+            <tr><td class="name"><span class="pill good"></span>watcher</td><td class="tag">latest</td><td class="note">1/1</td></tr>
+            <tr><td class="name"><span class="pill good"></span>mongodb</td><td class="tag">8.2.5</td><td class="note">1/1 · pinned to tenant-uat pool</td></tr>
+            <tr><td class="name"><span class="pill good"></span>qdrant-0</td><td class="tag">v1.16.0</td><td class="note">1/1 · pinned to tenant-uat pool</td></tr>
+            <tr><td class="name"><span class="pill good"></span>mysql-debug</td><td class="tag">8.0</td><td class="note">ad hoc, not helm-managed</td></tr>
+          </table>
+          <div class="foot">EFS <span class="mono">efs-sc-tenant-uat</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 05 DATA & STORAGE -->
+    <section class="slide" id="data">
+      <div class="slide-head">
+        <div class="num">05</div>
+        <div class="htext">
+          <div class="kicker">Data &amp; Storage</div>
+          <h2>In-cluster stores, per-tenant AWS resources</h2>
+          <div class="dek">MongoDB and Qdrant run as regular pods inside each tenant namespace. Everything durable and tenant-scoped — Aurora, EFS, S3, node root volumes — is provisioned per node group in Terraform.</div>
+        </div>
+      </div>
+
+      <div class="matrix-wrap">
+        <table class="matrix">
+          <tr><th>Node group</th><th>RDS (Aurora)</th><th>EFS</th><th>S3 bucket</th><th>EBS (node root)</th></tr>
+          <tr>
+            <td class="grp"><span class="dot"></span>default</td>
+            <td class="dash">—</td><td class="dash">—</td><td class="dash">—</td>
+            <td><span class="mono">gp3</span> 50GB, KMS-encrypted</td>
+          </tr>
+          <tr class="tenant-row">
+            <td class="grp"><span class="dot"></span>tenant-prod</td>
+            <td><span class="mono">aurora-mysql 8.0</span> · db.t3.medium</td>
+            <td><span class="mono">efs-sc-tenant-prod</span></td>
+            <td><span class="mono">saas-tenant-prod-bucket</span></td>
+            <td><span class="mono">gp3</span> 50GB, KMS-encrypted</td>
+          </tr>
+          <tr class="tenant-row">
+            <td class="grp"><span class="dot"></span>tenant-uat</td>
+            <td><span class="mono">aurora-mysql 8.0</span> · db.t3.medium</td>
+            <td><span class="mono">efs-sc-tenant-uat</span></td>
+            <td><span class="mono">saas-tenant-uat-bucket</span></td>
+            <td><span class="mono">gp3</span> 50GB, KMS-encrypted</td>
+          </tr>
+        </table>
+      </div>
+    </section>
+
+    <!-- 06 SECRETS & IDENTITY -->
+    <section class="slide" id="secrets">
+      <div class="slide-head">
+        <div class="num">06</div>
+        <div class="htext">
+          <div class="kicker">Secrets &amp; Identity</div>
+          <h2>Vault in the cluster, OIDC at the edge</h2>
+          <div class="dek">Two separate trust paths: workloads authenticate to Vault with their Kubernetes service account; GitHub Actions authenticates to AWS with a short-lived OIDC token. Neither stores a long-lived credential.</div>
+        </div>
+      </div>
+      <div class="grid three">
+        <div class="dg-box shared">
+          <h4>Vault (HA)</h4>
+          <div class="stack"><span class="mono">vault-0/1/2</span> — Raft consensus, KMS auto-unseal</div>
+        </div>
+        <div class="dg-box shared">
+          <h4>Agent injector</h4>
+          <div class="stack">Mutating webhook adds a <span class="mono">vault-agent</span> sidecar to annotated pods — visible as the 2/2 containers on server/ingestor/workflow</div>
+        </div>
+        <div class="dg-box shared">
+          <h4>Secrets operator</h4>
+          <div class="stack">Syncs <span class="mono">VaultStaticSecret</span> CRDs into native <span class="mono">Secret</span> objects for workloads that read env vars directly (e.g. watcher)</div>
+        </div>
+      </div>
+      <div class="row-label">Deploy-time identity</div>
+      <div class="card" style="border-left-color:var(--accent);">
+        <div class="stack" style="color:var(--muted);font-size:.85rem;">GitHub Actions exchanges its OIDC token for a short-lived AWS role via <span class="mono">aws-actions/configure-aws-credentials</span> — no <span class="mono">AWS_ACCESS_KEY_ID</span> stored anywhere in the repo or secrets.</div>
+      </div>
+    </section>
+
+    <!-- 07 LLM GATEWAY -->
+    <section class="slide" id="llm">
+      <div class="slide-head">
+        <div class="num">07</div>
+        <div class="htext">
+          <div class="kicker">LLM Gateway</div>
+          <h2>One gateway, one place to meter and rate-limit</h2>
+          <div class="dek">Tenant services don't call model providers directly — everything routes through a shared litellm deployment, which is the only thing holding Bedrock IAM permissions in practice.</div>
+        </div>
+      </div>
+      <div class="flow-strip">
+        <div class="flow-node">app-server / workflow<small>any tenant namespace</small></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-node accent">litellm.example.com<small>×3 replicas, v1.88.1</small></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-node">litellm-redis<small>cache · rate-limit state</small></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-node">AWS Bedrock<small>InvokeModel / ListFoundationModels</small></div>
+      </div>
+      <div class="matrix-caption" style="margin-top:1rem;">Bedrock IAM permissions are attached to every tenant node group's role, but the intended call path is through litellm — direct pod-to-Bedrock calls are possible, not the designed path.</div>
+    </section>
+
+    <!-- 08 OBSERVABILITY -->
+    <section class="slide" id="observability">
+      <div class="slide-head">
+        <div class="num">08</div>
+        <div class="htext">
+          <div class="kicker">Observability</div>
+          <h2>Metrics are live; logs are a gap</h2>
+          <div class="dek">kube-prometheus-stack covers metrics and alerting cluster-wide. Centralized logging is requested architecture, not yet a running namespace.</div>
+        </div>
+      </div>
+      <div class="grid shared">
+        <div class="card shared">
+          <h3>monitoring<span class="tag">shared</span></h3>
+          <div class="meta-line">monitoring-saas.example.com · kube-prometheus-stack</div>
+          <p>prometheus-operator, prometheus, alertmanager, grafana, kube-state-metrics, node-exporter ×10</p>
+          <div class="foot">path-routed: /grafana /prometheus /alertmanager</div>
+        </div>
+        <div class="card shared">
+          <h3>ELK stack<span class="tag">shared</span></h3>
+          <div class="meta-line"><span class="pill unverified"></span>centralized logging</div>
+          <p>Elasticsearch · Logstash · Kibana — cluster + application log aggregation</p>
+          <div class="foot">no dedicated namespace observed live</div>
+        </div>
+        <div class="card shared">
+          <h3>istio-system<span class="tag">shared</span></h3>
+          <div class="meta-line">mesh control plane + ingress</div>
+          <p>istiod · istio-ingress — the single entrypoint every namespace's Gateway selects</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 09 CI/CD -->
+    <section class="slide" id="cicd">
+      <div class="slide-head">
+        <div class="num">09</div>
+        <div class="htext">
+          <div class="kicker">CI/CD</div>
+          <h2>Two pipelines, one trust model</h2>
+          <div class="dek">Application releases and infrastructure changes ship through separate GitHub Actions paths, both authenticating to AWS the same way — OIDC, no static keys.</div>
+        </div>
+      </div>
+      <div class="cicd">
+        <div class="cicd-lane app">
+          <div class="lane-tag">app · helmfile</div>
+          <div class="cicd-steps">
+            <div class="step"><b>workflow_dispatch</b>(customer, environment)</div>
+            <div class="flow-arrow">→</div>
+            <div class="step">OIDC assume role</div>
+            <div class="flow-arrow">→</div>
+            <div class="step"><span class="mono">eks update-kubeconfig</span></div>
+            <div class="flow-arrow">→</div>
+            <div class="step">helmfile lint → diff</div>
+            <div class="flow-arrow">→</div>
+            <div class="step"><b>helmfile sync</b></div>
+            <div class="flow-arrow">→</div>
+            <div class="step">uat <span class="gatepill">auto</span> &nbsp; prod <span class="gatepill gated">required reviewers</span></div>
+          </div>
+          <div class="lane-badge verified">.github/workflows/deploy.yml</div>
+        </div>
+
+        <div class="cicd-lane infra">
+          <div class="lane-tag">infra · terraform</div>
+          <div class="cicd-substeps">
+            <div class="subrow">
+              <span class="sublabel">plan</span>
+              <div class="cicd-steps">
+                <div class="step">PR / push → <span class="mono">terraform/**</span></div>
+                <div class="flow-arrow">→</div>
+                <div class="step">OIDC assume role</div>
+                <div class="flow-arrow">→</div>
+                <div class="step">fmt → init → validate → plan</div>
+                <div class="flow-arrow">→</div>
+                <div class="step">PR comment <span class="gatepill">no gate</span></div>
+              </div>
+            </div>
+            <div class="subrow">
+              <span class="sublabel">apply</span>
+              <div class="cicd-steps">
+                <div class="step">push to main / dispatch(apply)</div>
+                <div class="flow-arrow">→</div>
+                <div class="step"><span class="gatepill gated">terraform env · required reviewers</span></div>
+                <div class="flow-arrow">→</div>
+                <div class="step">fresh OIDC + init</div>
+                <div class="flow-arrow">→</div>
+                <div class="step"><b>terraform apply</b> -auto-approve</div>
+              </div>
+            </div>
+          </div>
+          <div class="lane-badge verified">.github/workflows/terraform.yml</div>
+        </div>
+      </div>
+      <div class="matrix-caption">Plan and apply deliberately don't share a saved plan file: the <span class="mono">kubernetes</span> provider's <span class="mono">aws_eks_cluster_auth</span> token is short-lived (~15 min), and a review pause between a saved plan and its apply could let that token expire mid-apply. Instead <b>plan</b> stays ungated and purely informational, while <b>apply</b> waits on reviewer approval <i>first</i>, then runs its own fresh init + apply right after.</div>
+    </section>
+
+    <div class="deck-footer">
+      <div class="legend">
+        <div class="item"><span class="swatch" style="background:var(--tenant)"></span>tenant — per-customer app stack</div>
+        <div class="item"><span class="swatch" style="background:var(--shared)"></span>shared platform service</div>
+        <div class="item"><span class="swatch" style="background:var(--infra)"></span>AWS-managed, outside the cluster</div>
+        <div class="item"><span class="pill good" style="margin-right:.45rem"></span>verified live via kubectl</div>
+        <div class="item"><span class="pill unverified" style="margin-right:.45rem"></span>configured, not verified live this session</div>
+      </div>
+      <div class="footer-meta">
+        saas-platform · Helmfile + Terraform (terraform-aws-modules/eks/aws 21.9.0, terraform-aws-modules/rds-aurora/aws ~9.13.0) · namespaces observed: default, istio-system, litellm, monitoring, resilience-hub-test, vault, tenant-prod, tenant-uat
+      </div>
+    </div>
+
+  </div>
+</div>
+
+</body>
+</html>
